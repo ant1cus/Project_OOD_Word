@@ -1,0 +1,198 @@
+import os
+import pathlib
+
+import pandas as pd
+import docx
+from docx.enum.section import WD_ORIENTATION
+from docxtpl import DocxTemplate
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.table import _Cell
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.shared import Cm
+from docx.enum.table import WD_ROW_HEIGHT_RULE
+
+import datetime
+import traceback
+
+from PyQt5.QtCore import QThread, pyqtSignal
+
+
+class CreateTable(QThread):  # Если требуется вставить колонтитулы
+    progress = pyqtSignal(int)  # Сигнал для progressbar
+    status = pyqtSignal(str)  # Сигнал для статус бара
+    messageChanged = pyqtSignal(str, str)
+
+    def __init__(self, incoming_data):  # Список переданных элементов.
+        QThread.__init__(self)
+        self.path_file = incoming_data['path_file']
+        self.finish_path = incoming_data['finish_path']
+        self.file_name = incoming_data['file_name']
+        self.q = incoming_data['queue']
+        self.logging = incoming_data['logging']
+
+    def set_vertical_cell_direction(self, cell: _Cell, direction: str):
+        # direction: tbRl -- top to bottom, btLr -- bottom to top
+        assert direction in ("tbRl", "btLr")
+        tc = cell._tc
+        tcPr = tc.get_or_add_tcPr()
+        textDirection = OxmlElement('w:textDirection')
+        textDirection.set(qn('w:val'), direction)  # btLr tbRl
+        tcPr.append(textDirection)
+
+    def run(self):
+        try:
+            progress = 0
+            self.logging.info("\n*******************************************************************************\n")
+            self.logging.info('Начинаем создание таблицы')
+            self.status.emit('Старт')
+            self.progress.emit(progress)
+            time_start = datetime.datetime.now()
+            index = ['numSet', 'numTs', 'nameTs', 'firm', 'model', 'sn', 'quant',
+                     'secTs', 'secRom', 'first', 'second', 'secondK', 'mod', 'dat', 'snMni',
+                     'textMni', 'plat', 'textPlat']
+            name_col = ['№ комплекта', '№ ТС в комплекте', 'Наименование ТС', 'Фирма-производитель', 'Модель (Тип)',
+                        'Заводской номер', 'Кол-во, ТС  шт.', 'Степень секретности информации, обрабатываемой ТС',
+                        'Категория помещений, в котором установлено ТС', 'СЗЗ-1', 'СЗЗ-2', 'СЗЗ-2к',
+                        'Наименование и модель удалённого модуля позволяющего организовать канал обмена информацией',
+                        'Тип, наименование датчиков физических полей в составе ТС',
+                        'Тип, модель, заводской  номер подлежащего регистрации несъёмного МНИ',
+                        'Краткое описание места размещения несъёмного МНИ',
+                        'Платы содержащие элементы накопления и хранения информации',
+                        'Краткое описание места размещения плат, содержащих элементы накопления и хранения информации']
+            name_1_col = ['Тип и кол-во СЗЗ, нанесенных на каждое ТС', 'Несъёмные МНИ в составе ТС',
+                          'Элемент накопления и хранения информации в составе ТС']
+            df = pd.read_csv(self.path_file, delimiter='|', encoding='ANSI', header=None)
+            table_contents = []
+            len_rows = {}
+            progress += 15
+            self.logging.info('Преобразовываем df и формируем таблицу высоты, если требуется')
+            self.status.emit('Преобразование данных')
+            self.progress.emit(progress)
+            for ind_row, row in enumerate(df.itertuples()):
+                len_string = 0
+                list_val = [j for i, j in enumerate(row) if i > 0]
+                dict_val = {}
+                for ind, val in enumerate(list_val):
+                    if 8 < ind < 12 and (pd.isna(val) or val == '-'):
+                        dict_val[index[ind]] = 0
+                    elif ind >= 12 and (pd.isna(val) or val == '-'):
+                        dict_val[index[ind]] = 'Отсутствуют'
+                    else:
+                        dict_val[index[ind]] = val
+                    if ind >= 12 and isinstance(val, str) and len(val) > len_string:
+                        len_string = len(val)
+                table_contents.append(dict_val)
+                index_str = ind_row + 2
+                if 60 < len_string <= 80:
+                    len_rows[index_str] = 7
+                elif 80 < len_string <= 100:
+                    len_rows[index_str] = 8
+                elif 100 < len_string <= 120:
+                    len_rows[index_str] = 9
+                elif 120 < len_string <= 150:
+                    len_rows[index_str] = 10
+                elif 150 < len_string <= 170:
+                    len_rows[index_str] = 12
+                elif 170 < len_string <= 200:
+                    len_rows[index_str] = 14
+                elif 200 < len_string <= 250:
+                    len_rows[index_str] = 16
+                elif 250 < len_string <= 300:
+                    len_rows[index_str] = 18
+                elif len_string > 300:
+                    len_rows[index_str] = 20
+            self.logging.info('Удаляем отчёт с таким же именем, если он есть')
+            try:
+                os.remove(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+            except FileNotFoundError:
+                pass
+            progress += 15
+            self.logging.info('Создаем шаблон таблицы')
+            self.status.emit('Создаем шаблон таблицы')
+            self.progress.emit(progress)
+            document = docx.Document()  # Открываем
+            section = document.sections[0]
+            section.orientation = WD_ORIENTATION.LANDSCAPE  # Альбомная ориентация
+            section.page_width = Cm(42)
+            section.page_height = Cm(29.7)
+            table = document.add_table(rows=5, cols=18, style='Table Grid')
+            table.autofit = True
+            table.cell(2, 0).merge(table.cell(2, 17))
+            table.cell(4, 0).merge(table.cell(4, 17))
+            for i in range(18):
+                if i < 9 or i in [12, 13]:
+                    table.cell(0, i).merge(table.cell(1, i))
+                    table.cell(0, i).text = name_col[i]
+                elif i == 9:
+                    table.cell(0, i).merge(table.cell(0, 11))
+                    table.cell(1, i).text = name_col[i]
+                    table.cell(0, i).text = name_1_col[0]
+                elif i in [10, 11]:
+                    table.cell(1, i).text = name_col[i]
+                elif i == 14:
+                    table.cell(0, i).merge(table.cell(0, 15))
+                    table.cell(1, i).text = name_col[i]
+                    table.cell(0, i).text = name_1_col[1]
+                elif i == 16:
+                    table.cell(0, i).merge(table.cell(0, 17))
+                    table.cell(1, i).text = name_col[i]
+                    table.cell(0, i).text = name_1_col[2]
+                else:
+                    table.cell(1, i).text = name_col[i]
+                if i in [0, 1, 6, 7, 8, 12, 13]:
+                    self.set_vertical_cell_direction(table.cell(0, i), "btLr")
+                elif 8 < i < 12 or i > 13:
+                    self.set_vertical_cell_direction(table.cell(1, i), "btLr")
+                table.cell(1, i).paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                table.cell(0, i).vertical_alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                table.cell(1, i).vertical_alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            table.cell(0, 9).paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            table.cell(0, 14).paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            table.cell(0, 16).paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            table.cell(2, 0).text = '{%tr for item in table_contents %}'
+
+            # table.rows[3].height_rule = WD_ROW_HEIGHT_RULE.AUTO
+            table.rows[1].height_rule = WD_ROW_HEIGHT_RULE.EXACTLY
+            table.rows[1].height = Cm(7)
+            table.rows[3].height_rule = WD_ROW_HEIGHT_RULE.EXACTLY
+            table.rows[3].height = Cm(5)
+            for i, j in enumerate(index):
+                table.cell(3, i).text = '{{item.' + j + '}}'
+                table.cell(3, i).paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                table.cell(3, i).vertical_alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                if i > 11:
+                    self.set_vertical_cell_direction(table.cell(3, i), "btLr")
+
+            table.cell(4, 0).text = '{%tr endfor %}'
+            context = {'table_contents': table_contents}
+            document.save(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+            progress += 15
+            self.logging.info('Заносим данные в таблицу')
+            self.status.emit('Заносим данные в таблицу')
+            self.progress.emit(progress)
+            template = DocxTemplate(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+            template.render(context)
+            template.save(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+            progress += 35
+            self.logging.info('Проверяем высоту столбцов и изменяем, если нужно')
+            self.status.emit('Изменяем форматирование')
+            self.progress.emit(progress)
+            if len_rows:
+                percent = 20/len(len_rows)
+                document = docx.Document(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+                table = document.tables[0]
+                for key in len_rows:
+                    table.rows[key].height = Cm(len_rows[key])
+                    progress += percent
+                    self.progress.emit(progress)
+                document.save(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+            os.startfile(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+            self.logging.info("Конец программы, время работы: " + str(datetime.datetime.now() - time_start))
+            self.logging.info("\n*******************************************************************************\n")
+            self.status.emit('Готово!')  # Посылаем значние если готово
+            self.progress.emit(100)  # Завершаем прогресс бар
+        except BaseException as e:  # Если ошибка
+            self.status.emit('Ошибка')  # Сообщение в статус бар
+            self.logging.error("Ошибка:\n " + str(e) + '\n' + traceback.format_exc())
+            self.progress.emit(0)
