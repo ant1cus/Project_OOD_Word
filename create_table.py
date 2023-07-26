@@ -65,12 +65,17 @@ class CreateTable(QThread):  # Если требуется вставить ко
             df = pd.read_csv(self.path_file, delimiter='|', encoding='ANSI', header=None)
             table_contents = []
             len_rows = {}
+            number_set = []
+            number_set_val = 1000000000
             progress += 15
             self.logging.info('Преобразовываем df и формируем таблицу высоты, если требуется')
             self.status.emit('Преобразование данных')
             self.progress.emit(progress)
             for ind_row, row in enumerate(df.itertuples()):
                 len_string = 0
+                if row[1] != number_set_val:
+                    number_set_val = row[1]
+                    number_set.append(ind_row + 2)
                 list_val = [j for i, j in enumerate(row) if i > 0]
                 dict_val = {}
                 for ind, val in enumerate(list_val):
@@ -79,7 +84,10 @@ class CreateTable(QThread):  # Если требуется вставить ко
                     elif ind >= 12 and (pd.isna(val) or val == '-'):
                         dict_val[index[ind]] = 'Отсутствуют'
                     else:
-                        dict_val[index[ind]] = val
+                        if 8 < ind < 12:
+                            dict_val[index[ind]] = int(val)
+                        else:
+                            dict_val[index[ind]] = val
                     if ind >= 12 and isinstance(val, str) and len(val) > len_string:
                         len_string = len(val)
                 table_contents.append(dict_val)
@@ -102,6 +110,7 @@ class CreateTable(QThread):  # Если требуется вставить ко
                     len_rows[index_str] = 18
                 elif len_string > 300:
                     len_rows[index_str] = 20
+            number_set.append(len(df) + 2)
             self.logging.info('Удаляем отчёт с таким же именем, если он есть')
             try:
                 os.remove(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
@@ -175,13 +184,32 @@ class CreateTable(QThread):  # Если требуется вставить ко
             template.render(context)
             template.save(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
             progress += 35
-            self.logging.info('Проверяем высоту столбцов и изменяем, если нужно')
+            self.progress.emit(progress)
+            self.logging.info('Объединяем номера комплектов, проверяем высоту столбцов и изменяем, если нужно')
             self.status.emit('Изменяем форматирование')
+            number_start = False
+            number_finish = False
+            document = docx.Document(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+            table = document.tables[0]
+            for number in number_set:
+                if number_start is False:
+                    number_start = number
+                elif number_finish is False:
+                    number_finish = number - 1
+                    value = table.cell(number_start, 0).text
+                    table.cell(number_start, 0).merge(table.cell(number_finish, 0))
+                    table.cell(number_start, 0).text = value
+                    table.cell(number_start, 0).vertical_alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                    table.cell(number_start, 0).paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                    self.set_vertical_cell_direction(table.cell(number_start, 0), "btLr")
+                    number_start = number
+                    number_finish = False
+            progress += 10
             self.progress.emit(progress)
             if len_rows:
-                percent = 20/len(len_rows)
-                document = docx.Document(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
-                table = document.tables[0]
+                percent = 10/len(len_rows)
+                # document = docx.Document(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+                # table = document.tables[0]
                 for key in len_rows:
                     table.rows[key].height = Cm(len_rows[key])
                     progress += percent
