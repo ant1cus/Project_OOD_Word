@@ -72,7 +72,12 @@ class MainWindow(QMainWindow, Main.Ui_MainWindow):  # Главное окно
         self.thread.status.connect(self.statusBar().showMessage)
         self.thread.progress.connect(self.progressBar.setValue)
         self.thread.messageChanged.connect(self.on_message_changed)
+        self.thread.errors.connect(self.errors)
         self.thread.start()
+
+    def errors(self):
+        text = self.queue.get_nowait()
+        self.on_message_changed('Внимание!', 'Ошибки в загруженных данных, номера строк:\n' + ', '.join(text['errors']))
 
     def on_message_changed(self, title, description):
         if title == 'УПС!':

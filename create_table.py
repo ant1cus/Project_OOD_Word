@@ -1,6 +1,8 @@
 import os
 import pathlib
+import math
 
+import numpy as np
 import pandas as pd
 import docx
 from docx.enum.section import WD_ORIENTATION
@@ -19,16 +21,17 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 
 class CreateTable(QThread):  # Если требуется вставить колонтитулы
-    progress = pyqtSignal(int)  # Сигнал для progressbar
+    progress = pyqtSignal(int)  # Сигнал для прогресс бара
     status = pyqtSignal(str)  # Сигнал для статус бара
     messageChanged = pyqtSignal(str, str)
+    errors = pyqtSignal()
 
     def __init__(self, incoming_data):  # Список переданных элементов.
         QThread.__init__(self)
         self.path_file = incoming_data['path_file']
         self.finish_path = incoming_data['finish_path']
         self.file_name = incoming_data['file_name']
-        self.q = incoming_data['queue']
+        self.queue = incoming_data['queue']
         self.logging = incoming_data['logging']
 
     def set_vertical_cell_direction(self, cell: _Cell, direction: str):
@@ -45,7 +48,7 @@ class CreateTable(QThread):  # Если требуется вставить ко
             progress = 0
             self.logging.info("\n*******************************************************************************\n")
             self.logging.info('Начинаем создание таблицы')
-            self.status.emit('Старт')
+            self.status.emit('Считываем значения из файла')
             self.progress.emit(progress)
             time_start = datetime.datetime.now()
             index = ['numSet', 'numTs', 'nameTs', 'firm', 'model', 'sn', 'quant',
@@ -63,6 +66,19 @@ class CreateTable(QThread):  # Если требуется вставить ко
             name_1_col = ['Тип и кол-во СЗЗ, нанесенных на каждое ТС', 'Несъёмные МНИ в составе ТС',
                           'Элемент накопления и хранения информации в составе ТС']
             df = pd.read_csv(self.path_file, delimiter='|', encoding='ANSI', header=None)
+            serial_number = ''
+            incoming_errors = []
+            if df[0].isnull().any():
+                for ind, (first, second) in enumerate(zip(df[0].to_numpy(), df[1].to_numpy())):
+                    if second == 1:
+                        serial_number = first if pd.isna(first) is False else ''  # как вернуться к предыдущей?
+                    if pd.isna(first):
+                        incoming_errors.append(str(ind + 1))
+                        df.loc[ind, 0] = serial_number
+            if (int(math.log10(df.loc[0, 0]))+1) == 8:  # Для сверки номеров. Если это серийник - преобразование к int
+                df = df.astype({0: np.int})
+                df = df.astype({0: np.str})
+                df[0] = ['00' + element for element in df[0]]
             table_contents = []
             len_rows = {}
             number_set = []
@@ -84,7 +100,7 @@ class CreateTable(QThread):  # Если требуется вставить ко
                     elif ind >= 12 and (pd.isna(val) or val == '-'):
                         dict_val[index[ind]] = 'Отсутствуют'
                     else:
-                        if 8 < ind < 12:
+                        if ind == 6 or 8 < ind < 12:
                             dict_val[index[ind]] = int(val)
                         else:
                             dict_val[index[ind]] = val
@@ -218,8 +234,14 @@ class CreateTable(QThread):  # Если требуется вставить ко
             os.startfile(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
             self.logging.info("Конец программы, время работы: " + str(datetime.datetime.now() - time_start))
             self.logging.info("\n*******************************************************************************\n")
-            self.status.emit('Готово!')  # Посылаем значние если готово
-            self.progress.emit(100)  # Завершаем прогресс бар
+            if incoming_errors:
+                self.logging.info("Выводим ошибки")
+                self.status.emit('Готово, есть ошибки.')  # Посылаем значние если готово
+                self.queue.put({'errors': incoming_errors})
+                self.errors.emit()
+            else:
+                self.status.emit('Готово!')  # Посылаем значние если готово
+                self.progress.emit(100)  # Завершаем прогресс бар
         except BaseException as e:  # Если ошибка
             self.status.emit('Ошибка')  # Сообщение в статус бар
             self.logging.error("Ошибка:\n " + str(e) + '\n' + traceback.format_exc())

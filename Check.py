@@ -1,8 +1,12 @@
 import os
+import psutil
 
 
 def create_file(lineedit_data_file, lineedit_finish_folder, lineedit_file_name):
 
+    for proc in psutil.process_iter():
+        if proc.name() == 'WINWORD.EXE':
+            return ['УПС!', 'Закройте все файлы Word!']
     path_file = lineedit_data_file.text().strip()
     if not path_file:
         return ['УПС!', 'Путь к файлу выгрузок пуст']
