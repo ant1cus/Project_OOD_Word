@@ -71,6 +71,7 @@ class CreateTable(QThread):  # Если требуется вставить ко
             self.logging.info('Преобразовываем df и формируем таблицу высоты, если требуется')
             self.status.emit('Преобразование данных')
             self.progress.emit(progress)
+            previous_val = ''
             for ind_row, row in enumerate(df.itertuples()):
                 len_string = 0
                 if row[1] != number_set_val:
@@ -79,7 +80,13 @@ class CreateTable(QThread):  # Если требуется вставить ко
                 list_val = [j for i, j in enumerate(row) if i > 0]
                 dict_val = {}
                 for ind, val in enumerate(list_val):
-                    if 8 < ind < 12 and (pd.isna(val) or val == '-'):
+                    if ind == 1:
+                        if pd.isna(val):
+                            dict_val[index[ind]] = previous_val
+                        else:
+                            dict_val[index[ind]] = int(val) if val % 1 == 0 else val
+                            previous_val = dict_val[index[ind]]
+                    elif 8 < ind < 12 and (pd.isna(val) or val == '-'):
                         dict_val[index[ind]] = 0
                     elif ind >= 12 and (pd.isna(val) or val == '-'):
                         dict_val[index[ind]] = 'Отсутствуют'
@@ -204,6 +211,16 @@ class CreateTable(QThread):  # Если требуется вставить ко
                     table.cell(number_start, 0).vertical_alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
                     table.cell(number_start, 0).paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
                     self.set_vertical_cell_direction(table.cell(number_start, 0), "btLr")
+                    value_second = table.cell(number_start, 1).text
+                    number_start_sec = number_start
+                    for numb in range(number_start + 1, number_finish + 1):
+                        if table.cell(numb, 1).text == value_second:
+                            table.cell(number_start_sec, 1).merge(table.cell(numb, 1))
+                            table.cell(number_start_sec, 1).text = value_second
+                            table.cell(number_start_sec, 1).vertical_alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                            table.cell(number_start_sec, 1).paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                        value_second = table.cell(numb, 1).text
+                        number_start_sec = numb
                     number_start = number
                     number_finish = False
                 if len(number_set) > 100 and number_set.index(number) % 50 == 0:
