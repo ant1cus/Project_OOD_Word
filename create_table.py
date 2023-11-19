@@ -11,7 +11,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.table import _Cell
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-from docx.shared import Cm
+from docx.shared import Cm, Pt
 from docx.enum.table import WD_ROW_HEIGHT_RULE
 
 import datetime
@@ -115,6 +115,12 @@ class CreateTable(QThread):  # Если требуется вставить ко
                         len_string = len(val)
                 table_contents.append(dict_val)
                 index_str = ind_row + 2
+                # len_str = 7
+                # for len_element in range(50, 10000, 25):
+                #     if len_element < len_string <= len_element + 25:
+                #         len_rows[index_str] = len_str
+                #         break
+                #     len_str += 1
                 if 60 < len_string <= 80:
                     len_rows[index_str] = 7
                 elif 80 < len_string <= 100:
@@ -132,7 +138,7 @@ class CreateTable(QThread):  # Если требуется вставить ко
                 elif 250 < len_string <= 300:
                     len_rows[index_str] = 18
                 elif len_string > 300:
-                    len_rows[index_str] = 20
+                    len_rows[index_str] = 25
             number_set.append(len(df) + 2)
             self.logging.info('Удаляем отчёт с таким же именем, если он есть')
             try:
@@ -144,6 +150,10 @@ class CreateTable(QThread):  # Если требуется вставить ко
             self.status.emit('Создаем шаблон таблицы')
             self.progress.emit(progress)
             document = docx.Document()  # Открываем
+            style = document.styles['Normal']
+            font = style.font
+            font.name = 'Time New Roman'
+            font.size = Pt(10)
             section = document.sections[0]
             section.orientation = WD_ORIENTATION.LANDSCAPE  # Альбомная ориентация
             section.page_width = Cm(42)
@@ -155,19 +165,25 @@ class CreateTable(QThread):  # Если требуется вставить ко
             for i in range(18):
                 if i < 9 or i in [12, 13]:
                     table.cell(0, i).merge(table.cell(1, i))
+                    # table.cell(0, i).width = Cm(1.5)
                     table.cell(0, i).text = name_col[i]
                 elif i == 9:
                     table.cell(0, i).merge(table.cell(0, 11))
+                    # table.cell(1, i).width = Cm(1.5)
                     table.cell(1, i).text = name_col[i]
                     table.cell(0, i).text = name_1_col[0]
                 elif i in [10, 11]:
+                    # table.cell(0, i).width = Cm(1.5)
                     table.cell(1, i).text = name_col[i]
                 elif i == 14:
+                    # table.cell(0, i).width = Cm(1.5)
                     table.cell(0, i).merge(table.cell(0, 15))
                     table.cell(1, i).text = name_col[i]
                     table.cell(0, i).text = name_1_col[1]
                 elif i == 16:
                     table.cell(0, i).merge(table.cell(0, 17))
+                    table.cell(1, 16).width = Cm(51)
+                    table.cell(1, 17).width = Cm(51)
                     table.cell(1, i).text = name_col[i]
                     table.cell(0, i).text = name_1_col[2]
                 else:
@@ -186,7 +202,7 @@ class CreateTable(QThread):  # Если требуется вставить ко
 
             # table.rows[3].height_rule = WD_ROW_HEIGHT_RULE.AUTO
             table.rows[1].height_rule = WD_ROW_HEIGHT_RULE.EXACTLY
-            table.rows[1].height = Cm(7)
+            table.rows[1].height = Cm(8)
             table.rows[3].height_rule = WD_ROW_HEIGHT_RULE.EXACTLY
             table.rows[3].height = Cm(5)
             for i, j in enumerate(index):
