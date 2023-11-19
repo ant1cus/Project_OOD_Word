@@ -87,6 +87,7 @@ class CreateTable(QThread):  # Если требуется вставить ко
             self.logging.info('Преобразовываем df и формируем таблицу высоты, если требуется')
             self.status.emit('Преобразование данных')
             self.progress.emit(progress)
+            previous_val = ''
             for ind_row, row in enumerate(df.itertuples()):
                 len_string = 0
                 if row[1] != number_set_val:
@@ -95,7 +96,13 @@ class CreateTable(QThread):  # Если требуется вставить ко
                 list_val = [j for i, j in enumerate(row) if i > 0]
                 dict_val = {}
                 for ind, val in enumerate(list_val):
-                    if 8 < ind < 12 and (pd.isna(val) or val == '-'):
+                    if ind == 1:
+                        if pd.isna(val):
+                            dict_val[index[ind]] = previous_val
+                        else:
+                            dict_val[index[ind]] = int(val) if val % 1 == 0 else val
+                            previous_val = dict_val[index[ind]]
+                    elif 8 < ind < 12 and (pd.isna(val) or val == '-'):
                         dict_val[index[ind]] = 0
                     elif ind >= 12 and (pd.isna(val) or val == '-'):
                         dict_val[index[ind]] = 'Отсутствуют'
@@ -192,14 +199,14 @@ class CreateTable(QThread):  # Если требуется вставить ко
             table.cell(4, 0).text = '{%tr endfor %}'
             context = {'table_contents': table_contents}
             document.save(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
-            progress += 15
+            progress += 5
             self.logging.info('Заносим данные в таблицу')
             self.status.emit('Заносим данные в таблицу')
             self.progress.emit(progress)
             template = DocxTemplate(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
             template.render(context)
             template.save(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
-            progress += 35
+            progress += 5
             self.progress.emit(progress)
             self.logging.info('Объединяем номера комплектов, проверяем высоту столбцов и изменяем, если нужно')
             self.status.emit('Изменяем форматирование')
@@ -207,21 +214,39 @@ class CreateTable(QThread):  # Если требуется вставить ко
             number_finish = False
             document = docx.Document(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
             table = document.tables[0]
+            percent = 50 / len(number_set)
             for number in number_set:
                 if number_start is False:
                     number_start = number
                 elif number_finish is False:
                     number_finish = number - 1
+                    self.status.emit(f'Изменяем форматирование строк с {number_start} по {number_finish}')
                     value = table.cell(number_start, 0).text
                     table.cell(number_start, 0).merge(table.cell(number_finish, 0))
                     table.cell(number_start, 0).text = value
                     table.cell(number_start, 0).vertical_alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
                     table.cell(number_start, 0).paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
                     self.set_vertical_cell_direction(table.cell(number_start, 0), "btLr")
+                    value_second = table.cell(number_start, 1).text
+                    number_start_sec = number_start
+                    for numb in range(number_start + 1, number_finish + 1):
+                        if table.cell(numb, 1).text == value_second:
+                            table.cell(number_start_sec, 1).merge(table.cell(numb, 1))
+                            table.cell(number_start_sec, 1).text = value_second
+                            table.cell(number_start_sec, 1).vertical_alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                            table.cell(number_start_sec, 1).paragraphs[0].alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                        value_second = table.cell(numb, 1).text
+                        number_start_sec = numb
                     number_start = number
                     number_finish = False
-            progress += 10
-            self.progress.emit(progress)
+                if len(number_set) > 100 and number_set.index(number) % 50 == 0:
+                    document.save(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+                    document = docx.Document(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+                    table = document.tables[0]
+                progress += percent
+                self.progress.emit(int(progress))
+            # progress += 50
+            # self.progress.emit(progress)
             if len_rows:
                 percent = 10/len(len_rows)
                 # document = docx.Document(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
@@ -230,7 +255,7 @@ class CreateTable(QThread):  # Если требуется вставить ко
                     table.rows[key].height = Cm(len_rows[key])
                     progress += percent
                     self.progress.emit(progress)
-                document.save(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+            document.save(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
             os.startfile(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
             self.logging.info("Конец программы, время работы: " + str(datetime.datetime.now() - time_start))
             self.logging.info("\n*******************************************************************************\n")
