@@ -76,8 +76,8 @@ class CreateTable(QThread):  # Если требуется вставить ко
                         incoming_errors.append(str(ind + 1))
                         df.loc[ind, 0] = serial_number
             if (int(math.log10(df.loc[0, 0]))+1) == 8:  # Для сверки номеров. Если это серийник - преобразование к int
-                df = df.astype({0: np.int})
-                df = df.astype({0: np.str})
+                df = df.astype({0: int})
+                df = df.astype({0: str})
                 df[0] = ['00' + element for element in df[0]]
             table_contents = []
             len_rows = {}
@@ -153,8 +153,12 @@ class CreateTable(QThread):  # Если требуется вставить ко
             style = document.styles['Normal']
             font = style.font
             font.name = 'Time New Roman'
-            font.size = Pt(10)
+            font.size = Pt(11)
             section = document.sections[0]
+            section.top_margin = Cm(1)  # Верхний отступ
+            section.bottom_margin = Cm(1)  # Нижний отступ
+            section.left_margin = Cm(1)  # Отступ слева
+            section.right_margin = Cm(1)  # Отступ справа
             section.orientation = WD_ORIENTATION.LANDSCAPE  # Альбомная ориентация
             section.page_width = Cm(42)
             section.page_height = Cm(29.7)
@@ -165,18 +169,15 @@ class CreateTable(QThread):  # Если требуется вставить ко
             for i in range(18):
                 if i < 9 or i in [12, 13]:
                     table.cell(0, i).merge(table.cell(1, i))
-                    # table.cell(0, i).width = Cm(1.5)
+
                     table.cell(0, i).text = name_col[i]
                 elif i == 9:
                     table.cell(0, i).merge(table.cell(0, 11))
-                    # table.cell(1, i).width = Cm(1.5)
                     table.cell(1, i).text = name_col[i]
                     table.cell(0, i).text = name_1_col[0]
                 elif i in [10, 11]:
-                    # table.cell(0, i).width = Cm(1.5)
                     table.cell(1, i).text = name_col[i]
                 elif i == 14:
-                    # table.cell(0, i).width = Cm(1.5)
                     table.cell(0, i).merge(table.cell(0, 15))
                     table.cell(1, i).text = name_col[i]
                     table.cell(0, i).text = name_1_col[1]
