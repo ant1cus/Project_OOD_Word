@@ -2,8 +2,6 @@ import os
 import pathlib
 import math
 import threading
-
-import numpy as np
 import pandas as pd
 import docx
 from docx.enum.section import WD_ORIENTATION
@@ -121,12 +119,6 @@ class CreateTable(QThread):  # Если требуется вставить ко
                         len_string = len(val)
                 table_contents.append(dict_val)
                 index_str = ind_row + 2
-                # len_str = 7
-                # for len_element in range(50, 10000, 25):
-                #     if len_element < len_string <= len_element + 25:
-                #         len_rows[index_str] = len_str
-                #         break
-                #     len_str += 1
                 if 60 < len_string <= 80:
                     len_rows[index_str] = 7
                     if max_size_col_excel <= 15:
@@ -183,7 +175,6 @@ class CreateTable(QThread):  # Если требуется вставить ко
                         return
                 except FileNotFoundError:
                     break
-            # try:
             progress += 15
             # Новый отчёт excel
             while True:
@@ -239,8 +230,6 @@ class CreateTable(QThread):  # Если требуется вставить ко
                     ws.cell(1, i).value = name_1_col[1]
                 elif i == 17:
                     ws.merge_cells(start_row=1, start_column=i, end_row=1, end_column=18)
-                    # table.cell(1, 16).width = Cm(51)
-                    # table.cell(1, 17).width = Cm(51)
                     ws.cell(2, i).value = name_col[i - 1]
                     ws.cell(1, i).value = name_1_col[2]
                 else:
@@ -298,8 +287,6 @@ class CreateTable(QThread):  # Если требуется вставить ко
                     if text_len <= size:
                         ws.row_dimensions[r + 3].height = row_dimension[size]
                         break
-                # for size in row_dimension:
-
             wb.save(pathlib.Path(self.finish_path, f'{self.file_name}.xlsx'))
             self.logging.info('Создаем шаблон таблицы')
             self.status.emit('Создаем шаблон таблицы')
