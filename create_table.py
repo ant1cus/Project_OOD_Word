@@ -1,6 +1,7 @@
 import os
 import pathlib
 import math
+import threading
 
 import numpy as np
 import pandas as pd
@@ -18,6 +19,8 @@ import datetime
 import traceback
 
 from PyQt5.QtCore import QThread, pyqtSignal
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment, Font, Border, Side
 
 
 class CreateTable(QThread):  # Если требуется вставить колонтитулы
@@ -33,6 +36,8 @@ class CreateTable(QThread):  # Если требуется вставить ко
         self.file_name = incoming_data['file_name']
         self.queue = incoming_data['queue']
         self.logging = incoming_data['logging']
+        self.event = threading.Event()
+        self.event.set()
 
     def set_vertical_cell_direction(self, cell: _Cell, direction: str):
         # direction: tbRl -- top to bottom, btLr -- bottom to top
@@ -88,6 +93,7 @@ class CreateTable(QThread):  # Если требуется вставить ко
             self.status.emit('Преобразование данных')
             self.progress.emit(progress)
             previous_val = ''
+            max_size_col_excel = 10
             for ind_row, row in enumerate(df.itertuples()):
                 len_string = 0
                 if row[1] != number_set_val:
@@ -123,29 +129,178 @@ class CreateTable(QThread):  # Если требуется вставить ко
                 #     len_str += 1
                 if 60 < len_string <= 80:
                     len_rows[index_str] = 7
+                    if max_size_col_excel <= 15:
+                        max_size_col_excel = 15
                 elif 80 < len_string <= 100:
                     len_rows[index_str] = 8
+                    if max_size_col_excel <= 20:
+                        max_size_col_excel = 20
                 elif 100 < len_string <= 120:
                     len_rows[index_str] = 9
+                    if max_size_col_excel <= 25:
+                        max_size_col_excel = 25
                 elif 120 < len_string <= 150:
                     len_rows[index_str] = 10
+                    if max_size_col_excel <= 30:
+                        max_size_col_excel = 30
                 elif 150 < len_string <= 170:
                     len_rows[index_str] = 12
+                    if max_size_col_excel <= 35:
+                        max_size_col_excel = 35
                 elif 170 < len_string <= 200:
                     len_rows[index_str] = 14
+                    if max_size_col_excel <= 40:
+                        max_size_col_excel = 40
                 elif 200 < len_string <= 250:
                     len_rows[index_str] = 16
+                    if max_size_col_excel <= 45:
+                        max_size_col_excel = 45
                 elif 250 < len_string <= 300:
                     len_rows[index_str] = 18
+                    if max_size_col_excel <= 50:
+                        max_size_col_excel = 50
                 elif len_string > 300:
                     len_rows[index_str] = 25
+                    if max_size_col_excel <= 55:
+                        max_size_col_excel = 55
             number_set.append(len(df) + 2)
             self.logging.info('Удаляем отчёт с таким же именем, если он есть')
-            try:
-                os.remove(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
-            except FileNotFoundError:
-                pass
+            while True:
+                try:
+                    os.remove(pathlib.Path(self.finish_path, f'{self.file_name}.docx'))
+                    break
+                except PermissionError:
+                    self.messageChanged.emit('Вопрос?', f'Файл «{self.file_name}.docx» в проверямой папке должен быть'
+                                                        f' перезаписан. При необходимости сохраните файл в другое место'
+                                                        f' и закройте его. После этого нажмите «Да» для продолжения'
+                                                        f' или «Нет» для прерывания')
+                    self.event.clear()
+                    self.event.wait()
+                    if self.queue.get_nowait() is False:
+                        self.logging.warning('Процесс прерван пользователем при создании docx файла')
+                        self.status.emit('Прервано пользователем')
+                        self.progress.emit(0)
+                        return
+                except FileNotFoundError:
+                    break
+            # try:
             progress += 15
+            # Новый отчёт excel
+            while True:
+                try:
+                    os.remove(pathlib.Path(self.finish_path, f'{self.file_name}.xlsx'))
+                    with pd.ExcelWriter(pathlib.Path(self.finish_path, f'{self.file_name}.xlsx'),
+                                        engine='openpyxl', mode='w') as writer:
+                        df.to_excel(writer, sheet_name=self.file_name, index=False, header=False, startrow=2)
+                    break
+                except PermissionError:
+                    self.messageChanged.emit('Вопрос?', f'Файл «{self.file_name}.xlsx» в проверямой папке должен быть'
+                                                        f' перезаписан. При необходимости сохраните файл в другое место'
+                                                        f' и закройте его. После этого нажмите «Да» для продолжения'
+                                                        f' или «Нет» для прерывания')
+                    self.event.clear()
+                    self.event.wait()
+                    if self.queue.get_nowait() is False:
+                        self.logging.warning('Процесс прерван пользователем при создании excel файла')
+                        self.status.emit('Прервано пользователем')
+                        self.progress.emit(0)
+                        return
+            wb = load_workbook(pathlib.Path(self.finish_path, f'{self.file_name}.xlsx'))
+            ws = wb.active
+            thin = Side(border_style="thin", color="000000")
+            col_dimension = [5, 5, 25, 15, 15, 18, 5, 5, 5, 4, 4, 4, 5, 5, 6, 6] + [max_size_col_excel]*2
+            col_name = [chr(i) for i in range(65, 84)]
+            for i in range(1, 19):
+                ws.column_dimensions[col_name[i - 1]].width = col_dimension[i - 1]
+                ws.cell(1, i).font = Font(name="Times New Roman", size="10")
+                ws.cell(2, i).font = Font(name="Times New Roman", size="10")
+                ws.cell(1, i).border = Border(top=thin, left=thin, right=thin, bottom=thin)
+                ws.cell(2, i).border = Border(top=thin, left=thin, right=thin, bottom=thin)
+                ws.cell(1, i).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                ws.cell(2, i).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                if i in [10, 11, 12, 15, 16, 17, 18]:
+                    ws.cell(2, i).alignment = Alignment(horizontal="center", vertical="center", text_rotation=90,
+                                                        wrap_text=True)
+                if i not in [3, 4, 5, 6, 10, 11, 12, 15, 16, 17, 18]:
+                    ws.cell(1, i).alignment = Alignment(horizontal="center", vertical="center", text_rotation=90,
+                                                        wrap_text=True)
+                if i < 10 or i in [13, 14]:
+                    ws.merge_cells(start_row=1, start_column=i, end_row=2, end_column=i)
+                    ws.cell(1, i).value = name_col[i - 1]
+                elif i == 10:
+                    ws.merge_cells(start_row=1, start_column=i, end_row=1, end_column=12)
+                    ws.cell(2, i).value = name_col[i - 1]
+                    ws.cell(1, i).value = name_1_col[0]
+                elif i in [11, 12]:
+                    ws.cell(2, i).value = name_col[i - 1]
+                elif i == 15:
+                    ws.merge_cells(start_row=1, start_column=i, end_row=1, end_column=16)
+                    ws.cell(2, i).value = name_col[i - 1]
+                    ws.cell(1, i).value = name_1_col[1]
+                elif i == 17:
+                    ws.merge_cells(start_row=1, start_column=i, end_row=1, end_column=18)
+                    # table.cell(1, 16).width = Cm(51)
+                    # table.cell(1, 17).width = Cm(51)
+                    ws.cell(2, i).value = name_col[i - 1]
+                    ws.cell(1, i).value = name_1_col[2]
+                else:
+                    ws.cell(2, i).value = name_col[i - 1]
+            ws.row_dimensions[1].height = 50
+            ws.row_dimensions[2].height = 250
+            number_start = False
+            number_finish = False
+            for number in number_set:
+                if number_start is False:
+                    number_start = number + 1
+                elif number_finish is False:
+                    number_finish = number
+                    ws.merge_cells(start_row=number_start, start_column=1, end_row=number_finish, end_column=1)
+                    ws.cell(number_start, 1).font = Font(name="Times New Roman", size="10")
+                    ws.cell(number_start, 1).border = Border(top=thin, left=thin, right=thin, bottom=thin)
+                    ws.cell(number_start, 1).alignment = Alignment(horizontal="center", vertical="center",
+                                                                   text_rotation=90, wrap_text=True)
+                    second_number = number_start
+                    for j in range(number_start, number_finish + 1):
+                        ws.cell(j, 1).border = Border(top=thin, left=thin, right=thin, bottom=thin)
+                        ws.cell(j, 2).border = Border(top=thin, left=thin, right=thin, bottom=thin)
+                        ws.cell(j, 2).alignment = Alignment(horizontal="center", vertical="center")
+                        ws.cell(j, 2).font = Font(name="Times New Roman", size="10")
+                        if ws.cell(j, 2).value is not None:
+                            if second_number != j and second_number != j - 1:
+                                ws.merge_cells(start_row=second_number, start_column=2, end_row=j - 1, end_column=2)
+                            second_number = j
+                    number_start = number + 1
+                    number_finish = False
+            for i in range(3, df.shape[0] + 3):
+                for j in range(3, 13):
+                    ws.cell(i, j).font = Font(name="Times New Roman", size="10")
+                    ws.cell(i, j).border = Border(top=thin, left=thin, right=thin, bottom=thin)
+                    ws.cell(i, j).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            row_dimension = {250: 70, 500: 140, 700: 200, 1000: 270, 10000: 400}
+            for r, row in enumerate(ws[f'M3:R{df.shape[0] + 2}']):
+                text_len = 0
+                for cell in row:
+                    if len(cell.value) > text_len:
+                        text_len = len(cell.value)
+                for i, cell in enumerate(row):
+                    cell.font = Font(name="Times New Roman", size="10")
+                    if i <= 3:
+                        cell.alignment = Alignment(horizontal="center", vertical="center", text_rotation=90,
+                                                   wrap_text=True)
+                    else:
+                        if text_len > 250:
+                            cell.alignment = Alignment(horizontal="center", vertical="center", text_rotation=90,
+                                                       wrap_text=True)
+                        else:
+                            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                    cell.border = Border(top=thin, left=thin, right=thin, bottom=thin)
+                for size in row_dimension:
+                    if text_len <= size:
+                        ws.row_dimensions[r + 3].height = row_dimension[size]
+                        break
+                # for size in row_dimension:
+
+            wb.save(pathlib.Path(self.finish_path, f'{self.file_name}.xlsx'))
             self.logging.info('Создаем шаблон таблицы')
             self.status.emit('Создаем шаблон таблицы')
             self.progress.emit(progress)
@@ -272,7 +427,8 @@ class CreateTable(QThread):  # Если требуется вставить ко
                     progress += percent
                     self.progress.emit(progress)
             document.save(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
-            os.startfile(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
+            os.startfile(pathlib.Path(self.finish_path, f'{self.file_name}.docx'))
+            os.startfile(pathlib.Path(self.finish_path, f'{self.file_name}.xlsx'))
             self.logging.info("Конец программы, время работы: " + str(datetime.datetime.now() - time_start))
             self.logging.info("\n*******************************************************************************\n")
             if incoming_errors:
