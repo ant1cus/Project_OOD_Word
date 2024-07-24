@@ -1,13 +1,4 @@
-/.idea/.name
-/logs/2023-07-12_logs.log
-/logs/2023-07-13_logs.log
-/logs/2023-07-18_logs.log
-/.idea/misc.xml
-/.idea/modules.xml
-/.idea/inspectionProfiles/profiles_settings.xml
-/.idea/Project_Word.iml
-/test/ST-5343F21.txt
-/.idea/vcs.xml
-/.idea/workspace.xml
+/.idea
+/logs
+/test
 /Настройки.txt
-/test/Отчёт.docx
