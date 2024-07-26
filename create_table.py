@@ -176,6 +176,8 @@ class CreateTable(QThread):  # Если требуется вставить ко
                 except FileNotFoundError:
                     break
             progress += 15
+            self.status.emit('Создаем таблицу excel')
+            self.logging.info('Создаем таблицу excel')
             # Новый отчёт excel
             while True:
                 try:
@@ -209,7 +211,7 @@ class CreateTable(QThread):  # Если требуется вставить ко
                 ws.cell(2, i).border = Border(top=thin, left=thin, right=thin, bottom=thin)
                 ws.cell(1, i).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
                 ws.cell(2, i).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-                if i in [10, 11, 12, 15, 16, 17, 18]:
+                if i in [10, 11, 12, 15, 16]:
                     ws.cell(2, i).alignment = Alignment(horizontal="center", vertical="center", text_rotation=90,
                                                         wrap_text=True)
                 if i not in [3, 4, 5, 6, 10, 11, 12, 15, 16, 17, 18]:
@@ -288,6 +290,8 @@ class CreateTable(QThread):  # Если требуется вставить ко
                         ws.row_dimensions[r + 3].height = row_dimension[size]
                         break
             wb.save(pathlib.Path(self.finish_path, f'{self.file_name}.xlsx'))
+            progress += 5
+            self.progress.emit(progress)
             self.logging.info('Создаем шаблон таблицы')
             self.status.emit('Создаем шаблон таблицы')
             self.progress.emit(progress)
@@ -358,10 +362,8 @@ class CreateTable(QThread):  # Если требуется вставить ко
             table.cell(4, 0).text = '{%tr endfor %}'
             context = {'table_contents': table_contents}
             document.save(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
-            progress += 5
             self.logging.info('Заносим данные в таблицу')
             self.status.emit('Заносим данные в таблицу')
-            self.progress.emit(progress)
             template = DocxTemplate(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
             template.render(context)
             template.save(str(pathlib.Path(self.finish_path, str(self.file_name) + '.docx')))
