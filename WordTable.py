@@ -77,7 +77,7 @@ class MainWindow(QMainWindow, Main.Ui_MainWindow):  # Главное окно
 
     def errors(self):
         text = self.queue.get_nowait()
-        self.on_message_changed('Внимание!', 'Ошибки в загруженных данных, номера строк:\n' + ', '.join(text['errors']))
+        self.on_message_changed('Внимание!', text['title'] + ', '.join(text['errors']))
 
     def on_message_changed(self, title, description):
         if title == 'УПС!':

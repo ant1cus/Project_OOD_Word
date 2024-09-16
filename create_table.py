@@ -78,7 +78,17 @@ class CreateTable(QThread):  # Если требуется вставить ко
                     if pd.isna(first):
                         incoming_errors.append(str(ind + 1))
                         df.loc[ind, 0] = serial_number
+            # Здесь надо добавить предупреждение, чтобы при отсутсвии серийника в первой строке не падала программа
             if (int(math.log10(df.loc[0, 0]))+1) == 8:  # Для сверки номеров. Если это серийник - преобразование к int
+                index_null = [str(ind + 1) for ind, val in enumerate(df[0].to_numpy().tolist()) if len(str(val)) == 0]
+                if index_null:
+                    self.logging.info("Есть строки с пустыми sn: " + ', '.join(index_null))
+                    self.status.emit('Ошибка')  # Посылаем значние если готово
+                    self.queue.put({'errors': index_null, 'title': 'Ошибки в загруженных данных,'
+                                                                   ' номера строк с пропуском sn:\n'})
+                    self.errors.emit()
+                    self.progress.emit(0)
+                    return
                 df = df.astype({0: int})
                 df = df.astype({0: str})
                 df[0] = ['00' + element for element in df[0]]
@@ -181,7 +191,8 @@ class CreateTable(QThread):  # Если требуется вставить ко
             # Новый отчёт excel
             while True:
                 try:
-                    os.remove(pathlib.Path(self.finish_path, f'{self.file_name}.xlsx'))
+                    if pathlib.Path(self.finish_path, f'{self.file_name}.xlsx').exists():
+                        os.remove(pathlib.Path(self.finish_path, f'{self.file_name}.xlsx'))
                     with pd.ExcelWriter(pathlib.Path(self.finish_path, f'{self.file_name}.xlsx'),
                                         engine='openpyxl', mode='w') as writer:
                         df.to_excel(writer, sheet_name=self.file_name, index=False, header=False, startrow=2)
@@ -424,7 +435,7 @@ class CreateTable(QThread):  # Если требуется вставить ко
             if incoming_errors:
                 self.logging.info("Выводим ошибки")
                 self.status.emit('Готово, есть ошибки.')  # Посылаем значние если готово
-                self.queue.put({'errors': incoming_errors})
+                self.queue.put({'errors': incoming_errors, 'title': 'Ошибки в загруженных данных, номера строк:\n'})
                 self.errors.emit()
             else:
                 self.status.emit('Готово!')  # Посылаем значние если готово
