@@ -68,7 +68,7 @@ class CreateTable(QThread):  # Если требуется вставить ко
                         'Краткое описание места размещения плат, содержащих элементы накопления и хранения информации']
             name_1_col = ['Тип и кол-во СЗЗ, нанесенных на каждое ТС', 'Несъёмные МНИ в составе ТС',
                           'Элемент накопления и хранения информации в составе ТС']
-            df = pd.read_csv(self.path_file, delimiter='|', encoding='ANSI', header=None)
+            df = pd.read_csv(self.path_file, delimiter='|', encoding='ANSI', header=None, dtype={5: str})
             serial_number = ''
             incoming_errors = []
             if df[0].isnull().any():
